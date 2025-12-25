@@ -6,7 +6,7 @@ from threading import Thread
 # --- 1. سيرفر Flask ---
 app = Flask('')
 @app.route('/')
-def home(): return "X Video Fix is Live"
+def home(): return "X Video Direct Downloader"
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive():
     t = Thread(target=run)
@@ -54,7 +54,7 @@ def handle_verification(call):
         user_status[user_id] = "verified"
         bot.send_message(user_id, "تم تفعيل البوت بنجاح ✅\nالرجاء ارسال الرابط 🔗\n\nThe bot has been successfully activated ✅\nPlease send the link 🔗")
 
-# --- 4. معالج التحميل المحسن للفيديوهات المتعددة ---
+# --- 4. معالج التحميل (إرسال فيديوهات منفصلة) ---
 @bot.message_handler(func=lambda message: True)
 def handle_x_download(message):
     user_id = message.chat.id
@@ -67,7 +67,7 @@ def handle_x_download(message):
     if "x.com" in url or "twitter.com" in url:
         prog = bot.reply_to(message, "جاري التحميل ... ⏳\nLoading... ⏳")
         
-        # خيارات استخراج متقدمة للتأكد من جلب الفيديو
+        # خيارات جلب الفيديو فقط بأفضل جودة
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -77,34 +77,32 @@ def handle_x_download(message):
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                videos_to_send = []
+                found_any_video = False
 
-                # الحالة الأولى: تغريدة تحتوي على ألبوم (عدة فيديوهات)
+                # إذا كانت التغريدة تحتوي على قائمة فيديوهات
                 if 'entries' in info:
                     for entry in info['entries']:
-                        # نتحقق أن الملف المستخرج هو فيديو (ليس thumbnail)
-                        if entry.get('url') and ('.mp4' in entry['url'] or entry.get('vcodec') != 'none'):
-                            videos_to_send.append(types.InputMediaVideo(entry['url']))
+                        video_url = entry.get('url')
+                        # نتحقق أن الرابط فيديو فعلاً
+                        if video_url and (entry.get('vcodec') != 'none' or '.mp4' in video_url):
+                            bot.send_video(user_id, video_url)
+                            found_any_video = True
                 
-                # الحالة الثانية: فيديو واحد فقط
+                # إذا كانت التغريدة فيديو واحد
                 elif info.get('url'):
-                    if info.get('vcodec') != 'none' or '.mp4' in info['url']:
-                        videos_to_send.append(types.InputMediaVideo(info['url']))
+                    video_url = info.get('url')
+                    if info.get('vcodec') != 'none' or '.mp4' in video_url:
+                        bot.send_video(user_id, video_url)
+                        found_any_video = True
 
-                # الإرسال بناءً على النتائج
-                if videos_to_send:
-                    if len(videos_to_send) > 1:
-                        bot.send_media_group(user_id, videos_to_send[:10]) # بحد أقصى 10 فيديوهات
-                    else:
-                        bot.send_video(user_id, videos_to_send[0].media)
-                    
+                if found_any_video:
                     bot.send_message(user_id, "تم التحميل ✅\nDone ✅")
-                    bot.delete_message(user_id, prog.message_id)
                 else:
                     bot.edit_message_text("❌ لم يتم العثور على فيديوهات في هذا الرابط.", user_id, prog.message_id)
+                
+                bot.delete_message(user_id, prog.message_id)
 
         except Exception as e:
-            print(f"Error: {e}")
             bot.edit_message_text("نعتذر منك نواجه الان مشكله تقنية وسيتم معالجتها في أقرب وقت ❌\n\nWe apologize, we are currently experiencing a technical issue and it will be resolved as soon as possible ❌", user_id, prog.message_id)
     else:
         bot.reply_to(message, "الرجاء ارسال رابط الصحيح ❌\nPlease send the correct link ❌")
@@ -114,4 +112,3 @@ if __name__ == "__main__":
     bot.remove_webhook()
     time.sleep(1)
     bot.infinity_polling()
-    

@@ -3,10 +3,10 @@ from telebot import types
 from flask import Flask
 from threading import Thread
 
-# --- 1. سيرفر Flask ---
+# --- 1. سيرفر Flask للحفاظ على نشاط البوت ---
 app = Flask('')
 @app.route('/')
-def home(): return "X Video Direct Downloader"
+def home(): return "X Video Direct Downloader Live"
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive():
     t = Thread(target=run)
@@ -19,42 +19,42 @@ SNAP_LINK = "https://snapchat.com/t/wxsuV6qD"
 bot = telebot.TeleBot(API_TOKEN)
 user_status = {}
 
-# --- 3. نظام التحقق برسائل منفصلة ---
+# --- 3. نظام التحقق والمتابعة (Bold + HTML) ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.chat.id
     welcome_text = (
-        "اهلا بك 👋🏼\n"
-        "شكرا لاستخدامك بوت تحميل مقاطع منصة اكس \n"
-        "أولا سيجب عليك متابعة حسابي في سناب شات لتشغيل البوت\n\n"
-        "Welcome 👋🏼\n"
-        "Thank you for using X Downloader Bot \n"
-        "First, you'll need to follow my Snapchat account to activate the bot"
+        "<b>اهلا بك 👋🏼</b>\n"
+        "شكرا لاستخدامك بوت تحميل مقاطع منصة اكس\n"
+        "<b>⚠️ أولاً سيجب عليك متابعة حسابي في سناب شات لتشغيل البوت</b>\n\n"
+        "<b>Welcome 👋🏼</b>\n"
+        "Thank you for using X Downloader Bot\n"
+        "<b>⚠️ First, you'll need to follow my Snapchat account to activate the bot</b>"
     )
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("متابعة الحساب 👻 Follow", url=SNAP_LINK))
     markup.add(types.InlineKeyboardButton("تفعيل البوت 🔓 Activate", callback_data="step_1"))
-    bot.send_message(user_id, welcome_text, reply_markup=markup)
+    bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_verification(call):
     user_id = call.message.chat.id
     if call.data == "step_1":
         fail_msg = (
-            "نعتذر منك لم يتم التحقق من متابعتك لحساب سناب شات ❌👻\n"
-            "الرجاء الضغط على متابعة الحساب وسيتم توجيهك لسناب شات وبعد المتابعة اضغط على زر تفعيل البوت 🔓\n\n"
-            "We apologize, but your Snapchat account follow request has not been verified. ❌👻\n"
-            "Please click \"Follow Account\" and you will be redirected to Snapchat. After following, click the \"Activate\" button. 🔓"
+            "<b>نعتذر منك لم يتم التحقق من متابعتك لحساب سناب شات ❌👻</b>\n"
+            "الرجاء الضغط على متابعة الحساب وسيتم توجيهك لسناب شات وبعد المتابعة اضغط على زر <b>تفعيل البوت 🔓</b>\n\n"
+            "<b>We apologize, but your Snapchat account follow request has not been verified. ❌👻</b>\n"
+            "Please click Follow Account and you will be redirected to Snapchat. After following, click the <b>Activate</b> button. 🔓"
         )
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("متابعة الحساب 👻 Follow", url=SNAP_LINK))
         markup.add(types.InlineKeyboardButton("تفعيل البوت 🔓 Activate", callback_data="step_2"))
-        bot.send_message(user_id, fail_msg, reply_markup=markup)
+        bot.send_message(user_id, fail_msg, reply_markup=markup, parse_mode='HTML')
     elif call.data == "step_2":
         user_status[user_id] = "verified"
-        bot.send_message(user_id, "تم تفعيل البوت بنجاح ✅\nالرجاء ارسال الرابط 🔗\n\nThe bot has been successfully activated ✅\nPlease send the link 🔗")
+        bot.send_message(user_id, "<b>تم تفعيل البوت بنجاح ✅\nالرجاء ارسال الرابط 🔗</b>\n\n<b>The bot has been successfully activated ✅</b>", parse_mode='HTML')
 
-# --- 4. معالج التحميل (إرسال فيديوهات منفصلة) ---
+# --- 4. معالج التحميل المطور ---
 @bot.message_handler(func=lambda message: True)
 def handle_x_download(message):
     user_id = message.chat.id
@@ -65,9 +65,8 @@ def handle_x_download(message):
         return
 
     if "x.com" in url or "twitter.com" in url:
-        prog = bot.reply_to(message, "جاري التحميل ... ⏳\nLoading... ⏳")
+        prog = bot.reply_to(message, "<b>جاري التحميل ... ⏳\nLoading... ⏳</b>", parse_mode='HTML')
         
-        # خيارات جلب الفيديو فقط بأفضل جودة
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -79,16 +78,13 @@ def handle_x_download(message):
                 info = ydl.extract_info(url, download=False)
                 found_any_video = False
 
-                # إذا كانت التغريدة تحتوي على قائمة فيديوهات
                 if 'entries' in info:
                     for entry in info['entries']:
                         video_url = entry.get('url')
-                        # نتحقق أن الرابط فيديو فعلاً
                         if video_url and (entry.get('vcodec') != 'none' or '.mp4' in video_url):
                             bot.send_video(user_id, video_url)
                             found_any_video = True
                 
-                # إذا كانت التغريدة فيديو واحد
                 elif info.get('url'):
                     video_url = info.get('url')
                     if info.get('vcodec') != 'none' or '.mp4' in video_url:
@@ -96,19 +92,28 @@ def handle_x_download(message):
                         found_any_video = True
 
                 if found_any_video:
-                    bot.send_message(user_id, "تم التحميل ✅\nDone ✅")
+                    bot.send_message(user_id, "<b>تم التحميل ✅\nDone ✅</b>", parse_mode='HTML')
                 else:
-                    bot.edit_message_text("❌ لم يتم العثور على فيديوهات في هذا الرابط.", user_id, prog.message_id)
+                    bot.edit_message_text("<b>❌ لم يتم العثور على فيديوهات في هذا الرابط.</b>", user_id, prog.message_id, parse_mode='HTML')
                 
                 bot.delete_message(user_id, prog.message_id)
 
-        except Exception as e:
-            bot.edit_message_text("نعتذر منك نواجه الان مشكله تقنية وسيتم معالجتها في أقرب وقت ❌\n\nWe apologize, we are currently experiencing a technical issue and it will be resolved as soon as possible ❌", user_id, prog.message_id)
+        except Exception:
+            # رسالة الخطأ التقني الأصلية بالخط العريض
+            error_tech = (
+                "<b>نعتذر منك نواجه الان مشكله تقنية وسيتم معالجتها في أقرب وقت ❌</b>\n\n"
+                "<b>We apologize, we are currently experiencing a technical issue and it will be resolved as soon as possible ❌</b>"
+            )
+            bot.edit_message_text(error_tech, user_id, prog.message_id, parse_mode='HTML')
     else:
-        bot.reply_to(message, "الرجاء ارسال رابط الصحيح ❌\nPlease send the correct link ❌")
+        bot.reply_to(message, "<b>الرجاء ارسال الرابط الصحيح ❌\nPlease send the correct link ❌</b>", parse_mode='HTML')
 
+# --- 5. التشغيل الآمن ---
 if __name__ == "__main__":
     keep_alive()
-    bot.remove_webhook()
+    try:
+        bot.remove_webhook()
+    except:
+        pass
     time.sleep(1)
-    bot.infinity_polling()
+    bot.infinity_polling(timeout=20, long_polling_timeout=10)

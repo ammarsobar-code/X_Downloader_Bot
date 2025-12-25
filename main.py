@@ -25,10 +25,10 @@ def send_welcome(message):
     user_id = message.chat.id
     welcome_text = (
         "اهلا بك 👋🏼\n"
-        "شكرا لاستخدامك بوت حفظ السنابات 👻\n"
+        "شكرا لاستخدامك بوت تحميل مقاطع منصة اكس \n"
         "أولا سيجب عليك متابعة حسابي في سناب شات لتشغيل البوت\n\n"
         "Welcome 👋🏼\n"
-        "Thank you for using the Snap Saver Bot 👻\n"
+        "Thank you for using X Download Bot \n"
         "First, you'll need to follow my Snapchat account to activate the bot"
     )
     markup = types.InlineKeyboardMarkup()

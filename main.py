@@ -6,7 +6,7 @@ from threading import Thread
 # --- 1. سيرفر Flask ---
 app = Flask('')
 @app.route('/')
-def home(): return "X Multi-Downloader Live"
+def home(): return "X Video Downloader Live"
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive():
     t = Thread(target=run)
@@ -19,7 +19,7 @@ SNAP_LINK = "https://snapchat.com/t/wxsuV6qD"
 bot = telebot.TeleBot(API_TOKEN)
 user_status = {}
 
-# --- 3. نظام التحقق برسائل منفصلة ---
+# --- 3. نظام التحقق برسائل منفصلة (تعديلك المطلوب) ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.chat.id
@@ -41,7 +41,6 @@ def handle_verification(call):
     user_id = call.message.chat.id
     
     if call.data == "step_1":
-        # رسالة الاعتذار (منفصلة)
         fail_msg = (
             "نعتذر منك لم يتم التحقق من متابعتك لحساب سناب شات ❌👻\n"
             "الرجاء الضغط على متابعة الحساب وسيتم توجيهك لسناب شات وبعد المتابعة اضغط على زر تفعيل البوت 🔓\n\n"
@@ -63,7 +62,7 @@ def handle_verification(call):
         )
         bot.send_message(user_id, success_text)
 
-# --- 4. معالج تحميل الصور والفيديوهات المتعددة ---
+# --- 4. معالج تحميل فيديوهات X المتعددة ---
 @bot.message_handler(func=lambda message: True)
 def handle_x_download(message):
     user_id = message.chat.id
@@ -76,35 +75,35 @@ def handle_x_download(message):
     if "x.com" in url or "twitter.com" in url:
         prog = bot.reply_to(message, "جاري التحميل ... ⏳\nLoading... ⏳")
         
-        # إعدادات yt-dlp لجلب كل الوسائط
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'format': 'best',
+            'format': 'bestvideo+bestaudio/best', # جلب أفضل جودة فيديو
+            'merge_output_format': 'mp4',
         }
         
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 
-                # فحص إذا كانت تغريدة متعددة الوسائط (ألبوم)
-                media_list = []
+                # فحص إذا كان هناك عدة مدخلات (أكثر من فيديو في التغريدة)
+                videos = []
                 if 'entries' in info:
+                    # تغريدة تحتوي على عدة فيديوهات
                     for entry in info['entries']:
                         if entry.get('url'):
-                            media_list.append(types.InputMediaPhoto(entry['url']) if 'video' not in entry.get('format_id', '') else types.InputMediaVideo(entry['url']))
-                
-                # إذا كانت تغريدة واحدة (فيديو أو صورة)
-                if not media_list:
-                    if info.get('vcodec') != 'none': # فيديو
-                        bot.send_video(user_id, info['url'])
-                    else: # صورة واحدة
-                        bot.send_photo(user_id, info['url'])
-                else:
-                    # إرسال المجموعة (بحد أقصى 10)
-                    bot.send_media_group(user_id, media_list[:10])
+                            videos.append(types.InputMediaVideo(entry['url']))
+                elif info.get('url'):
+                    # تغريدة تحتوي على فيديو واحد فقط
+                    videos.append(types.InputMediaVideo(info['url']))
 
-                bot.send_message(user_id, "تم التحميل ✅\nDone ✅")
+                if videos:
+                    # إرسال الفيديوهات كمجموعة واحدة (Album)
+                    bot.send_media_group(user_id, videos)
+                    bot.send_message(user_id, "تم التحميل ✅\nDone ✅")
+                else:
+                    bot.edit_message_text("الرجاء ارسال رابط الصحيح ❌\nPlease send the correct link ❌", user_id, prog.message_id)
+                
                 bot.delete_message(user_id, prog.message_id)
 
         except Exception:

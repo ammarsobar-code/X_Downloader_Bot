@@ -1,4 +1,4 @@
-import os, telebot, yt_dlp, time
+import os, telebot, yt_dlp, time, sys, subprocess, shutil
 from telebot import types
 from flask import Flask
 from threading import Thread
@@ -13,13 +13,32 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# --- 2. إعدادات البوت ---
+# --- 2. وظيفة التنظيف التلقائي (Auto-Clean) ---
+def auto_clean_environment():
+    """تنظيف الذاكرة وقتل العمليات العالقة لضمان استقرار البوت"""
+    try:
+        # مسح ذاكرة التخزين المؤقت لـ yt-dlp
+        subprocess.run([sys.executable, "-m", "yt_dlp", "--rm-cache-dir"], stderr=subprocess.DEVNULL)
+        
+        # قتل أي عمليات yt-dlp أو ffmpeg معلقة تستهلك الرام
+        if os.name != 'nt':
+            subprocess.run(["pkill", "-9", "-f", "yt-dlp"], stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "-f", "ffmpeg"], stderr=subprocess.DEVNULL)
+            
+        # تنظيف مجلد التحميلات إذا وُجد
+        if os.path.exists("downloads"):
+            shutil.rmtree("downloads", ignore_errors=True)
+            os.makedirs("downloads", exist_ok=True)
+    except:
+        pass
+
+# --- 3. إعدادات البوت ---
 API_TOKEN = os.getenv('BOT_TOKEN')
 SNAP_LINK = "https://snapchat.com/t/wxsuV6qD" 
 bot = telebot.TeleBot(API_TOKEN)
 user_status = {}
 
-# --- 3. نظام التحقق والمتابعة (Bold + HTML) ---
+# --- 4. نظام التحقق والمتابعة ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.chat.id
@@ -42,9 +61,7 @@ def handle_verification(call):
     if call.data == "step_1":
         fail_msg = (
             "<b>نعتذر منك لم يتم التحقق من متابعتك لحساب سناب شات ❌👻</b>\n"
-            "الرجاء الضغط على متابعة الحساب وسيتم توجيهك لسناب شات وبعد المتابعة اضغط على زر <b>تفعيل البوت 🔓</b>\n\n"
-            "<b>We apologize, but your Snapchat account follow request has not been verified. ❌👻</b>\n"
-            "Please click Follow Account and you will be redirected to Snapchat. After following, click the <b>Activate</b> button. 🔓"
+            "الرجاء الضغط على متابعة الحساب وسيتم توجيهك لسناب شات وبعد المتابعة اضغط على زر <b>تفعيل البوت 🔓</b>"
         )
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("متابعة الحساب 👻 Follow", url=SNAP_LINK))
@@ -52,9 +69,9 @@ def handle_verification(call):
         bot.send_message(user_id, fail_msg, reply_markup=markup, parse_mode='HTML')
     elif call.data == "step_2":
         user_status[user_id] = "verified"
-        bot.send_message(user_id, "<b>تم تفعيل البوت بنجاح ✅\nالرجاء ارسال الرابط 🔗</b>\n\n<b>The bot has been successfully activated ✅</b>", parse_mode='HTML')
+        bot.send_message(user_id, "<b>تم تفعيل البوت بنجاح ✅\nالرجاء ارسال الرابط 🔗</b>", parse_mode='HTML')
 
-# --- 4. معالج التحميل المطور ---
+# --- 5. معالج التحميل المطور مع نظام التنظيف ---
 @bot.message_handler(func=lambda message: True)
 def handle_x_download(message):
     user_id = message.chat.id
@@ -67,10 +84,12 @@ def handle_x_download(message):
     if "x.com" in url or "twitter.com" in url:
         prog = bot.reply_to(message, "<b>جاري التحميل ... ⏳\nLoading... ⏳</b>", parse_mode='HTML')
         
+        # إعدادات متطورة لمنع استهلاك الموارد
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'cachedir': False, # تعطيل الكاش على القرص
         }
         
         try:
@@ -93,27 +112,32 @@ def handle_x_download(message):
 
                 if found_any_video:
                     bot.send_message(user_id, "<b>تم التحميل ✅\nDone ✅</b>", parse_mode='HTML')
+                    bot.delete_message(user_id, prog.message_id)
                 else:
-                    bot.edit_message_text("<b>❌ لم يتم العثور على فيديوهات في هذا الرابط.</b>", user_id, prog.message_id, parse_mode='HTML')
-                
-                bot.delete_message(user_id, prog.message_id)
+                    bot.edit_message_text("<b>❌ لم يتم العثور على فيديوهات.</b>", user_id, prog.message_id, parse_mode='HTML')
 
         except Exception:
-            # رسالة الخطأ التقني الأصلية بالخط العريض
             error_tech = (
                 "<b>نعتذر منك نواجه الان مشكله تقنية وسيتم معالجتها في أقرب وقت ❌</b>\n\n"
-                "<b>We apologize, we are currently experiencing a technical issue and it will be resolved as soon as possible ❌</b>"
+                "<b>Technical issue occurred ❌</b>"
             )
             bot.edit_message_text(error_tech, user_id, prog.message_id, parse_mode='HTML')
+        
+        finally:
+            # --- الإضافة الجوهرية: التنظيف الإجباري بعد كل طلب ---
+            auto_clean_environment()
+            
     else:
-        bot.reply_to(message, "<b>الرجاء ارسال الرابط الصحيح ❌\nPlease send the correct link ❌</b>", parse_mode='HTML')
+        bot.reply_to(message, "<b>الرجاء ارسال الرابط الصحيح ❌</b>", parse_mode='HTML')
 
-# --- 5. التشغيل الآمن ---
+# --- 6. التشغيل الآمن ---
 if __name__ == "__main__":
     keep_alive()
+    auto_clean_environment() # تنظيف أولي عند بدء التشغيل
     try:
         bot.remove_webhook()
-    except:
-        pass
+    except: pass
     time.sleep(1)
-    bot.infinity_polling(timeout=20, long_polling_timeout=10)
+    print("X Bot is starting...")
+    # استخدام بولينج معزز لضمان استمرارية الاتصال
+    bot.infinity_polling(timeout=20, long_polling_timeout=10, restart_on_change=False)
